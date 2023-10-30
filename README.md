@@ -22,8 +22,8 @@ In the above architecture, Amazon Connects fires contact lifecycle events for ca
 ## Walkthrough
 
 1.	Download the backend source code (from /backend) in your local.
-    1. Run npn install
-    2. zip the contnet 
+    1. Run npm install
+    2. zip the content 
     3. Name the ziped file index.zip
 
 2.  Download the frontend code (./frontend).
