@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>Amazon Connect - Instance API's</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta content="utf-8" http-equiv="encoding">
+    <script src=https://cdn.jsdelivr.net/npm/jquery@3.5/dist/jquery.min.js></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <link href="css/style.css" rel="stylesheet" type="text/css" />    
+    <link href="css/modal.css" rel="stylesheet" type="text/css" />    
+    <script src="js/index.js"></script>
+    
+</head>
+
+<body>
+  <legend>CallBack Status</legend>
+  <br/>
+  <div id="loginModal" class="modal">
+    <!-- Modal content -->
+    <div class="modal-content" align="center">
+      <span class="close">&times;</span>
+      LOGIN <br/>
+      <label for="username">UserName:</label>
+      <input type="text" id="username" name="username">
+      <br/>
+      <br/>
+      <label for="password">Password:</label>
+      <input type="text" id="password" name="password">
+      <br/>
+      <br/>
+      <button type="button" onclick="login()">Login</button>&nbsp;&nbsp;&nbsp;&nbsp;
+      <br/>
+      <div id="errorLogin"></div>      
+    </div>
+  
+  </div>
+  
+<section id="section-selection">
+  <label>Selections</label>
+
+  <select name="queue" id="queue" onchange="getCallbackInfo()">
+    <option value="ALL">ALL</option>
+  </select>
+
+  <select name="status" id="status" onchange="getCallbackInfo()">
+    <option value="ALL">ALL</option>
+    <option value="INITIATED">INITIATED</option>
+    <option value="QUEUED">QUEUED</option>
+    <option value="CONNECTED_TO_SYSTEM">CONNECTED_TO_SYSTEM</option>
+    <option value="CONNECTED_TO_AGENT">CONNECTED_TO_AGENT</option>
+    <option value="DISCONNECTED">DISCONNECTED</option>
+  </select>
+  <br/>
+  <br/>
+  <button type="button" onclick="stopMultipleContact()">Stop Contact</button>&nbsp;&nbsp;&nbsp;&nbsp;
+  <button type="button" onclick="download()">DOWNLOAD</button>&nbsp;&nbsp;&nbsp;&nbsp;
+  <!--
+  Stop Message &nbsp;&nbsp;&nbsp;
+  <textarea id="stopMessage" name="stopMessage" rows="3" cols="100" maxlength="500"></textarea>
+  <br>
+ -->
+</section>
+
+<section id="section-json-output">
+  Select All&nbsp;<input type="checkbox" name="select-all" id="select-all" />
+  <h3>Call Back List</h3>
+        <table class="table" id="contactIdDetailTable">
+            <thead>
+              <tr>
+                 <th scope="col">Called Id </th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">Contact Id</th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">Queue Name</th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">Queue Id</th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">Status</th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">TimeStamp</th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">Duplicate </th>
+                 <th scope="col">&nbsp; </th>
+                 <th scope="col">Stop Select </th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+    </section>
+
+          
+</body>
+</html>

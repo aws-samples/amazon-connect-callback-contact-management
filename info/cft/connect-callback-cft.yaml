@@ -1,0 +1,431 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'AWS Connect Callback Manage Solution'
+
+#######################
+# Parameters
+#######################
+Parameters:
+  SolutionSourceBucket:
+    Type: String
+    Description: Source Bucket Name
+  InstanceArn:
+    Type: String
+    Description: Connect Instance ARN
+  AdminUserEmail:
+    Type: String
+    Description: Email Address
+
+#######################
+# Globals
+#######################
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Architectures:
+      - x86_64
+    MemorySize: 128
+
+#######################
+# RESOURCES
+#######################
+Resources:
+
+#######################
+# Lambda IAM Role
+#######################
+  CtrEventLambdaIamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      RoleName : !Sub '${AWS::StackName}-CtrRole'
+      Policies:
+        - PolicyName: logs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: dynamodb
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
+                Resource: 
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CallbackEventLogTable}'
+        - PolicyName: connect
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'connect:DescribeContact'
+                  - 'connect:GetContactAttributes'
+                  - 'connect:StopContact'
+                Resource: 
+                  - !Sub '${InstanceArn}/contact/*'
+        - PolicyName: connectQueues
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'connect:ListQueues'
+                Resource: 
+                  - !Sub '${InstanceArn}/queue/*'
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  PublicLambdaIamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      RoleName : !Sub '${AWS::StackName}-PublicRole'
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+#######################
+# EVENT Rule - filers only Connect CALLBACK EVENTS
+#######################
+  ConnectEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Forward all AWS service events from default event bus to Lambda"
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.connect
+        detail-type: 
+        - "Amazon Connect Contact Event"
+        detail: 
+          initiationMethod: 
+            - "CALLBACK"
+      Targets:
+        - Arn: !GetAtt CtrEventLambda.Arn
+          Id: Lambda
+      EventBusName: default
+
+  ConnectEventsRulePermission: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref "CtrEventLambda"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ConnectEventsRule.Arn
+
+#######################
+# Lambda Function
+#######################
+  CtrEventLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-CtrEventLambda'
+      Handler: index.handler
+      CodeUri: 
+        Bucket: !Ref SolutionSourceBucket
+        Key: index.zip
+      Description: CtrEventLambda
+      Role: !GetAtt CtrEventLambdaIamRole.Arn
+      Environment:
+        Variables:
+          CallbackEventLogTable: !Ref CallbackEventLogTable
+          InstanceArn: !Ref InstanceArn
+
+#######################
+# Lambda SERVICE API 
+#######################
+
+  CtrListAPI:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-CtrListAPI'
+      CodeUri: 
+        Bucket: !Ref SolutionSourceBucket
+        Key: index.zip
+      Handler: ctrListAPI.handler
+      Description: CtrListAPI
+      Role: !GetAtt CtrEventLambdaIamRole.Arn
+      Environment:
+        Variables:
+          CallbackEventLogTable: !Ref CallbackEventLogTable
+          InstanceArn: !Ref InstanceArn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /ctrList
+            Method: GET
+            RestApiId: !Ref secureApi
+  ConfigAPI:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-ConfigAPI'
+      CodeUri: 
+        Bucket: !Ref SolutionSourceBucket
+        Key: index.zip
+      Handler: configIndex.handler
+      Description: ConfigAPI
+      Role: !GetAtt PublicLambdaIamRole.Arn
+      Environment:
+        Variables:
+          CognitoUserPoolClient: !Ref CognitoUserPoolClient
+          CognitoUserPool: !Ref CognitoUserPool          
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /config
+            Method: GET
+            RestApiId: !Ref publicApi
+
+#######################
+# APIS
+#######################
+  publicApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: public
+      Cors:
+        AllowMethods: "'GET'"
+        AllowHeaders: "'*'"
+        MaxAge: "'0'"
+  secureApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: secure
+      Cors:
+        AllowMethods: "'POST, GET'"
+        AllowHeaders: "'*'"
+        MaxAge: "'0'"
+      Auth:
+        Authorizers:
+          MyCognitoAuth:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
+            AuthType: "COGNITO_USER_POOLS"
+        DefaultAuthorizer: MyCognitoAuth
+        AddDefaultAuthorizerToCorsPreflight: false
+
+#######################
+# Dynamodb Table 
+#######################
+  CallbackEventLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: contactId
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: contactId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TableName: CallbackEventLogTable
+
+#######################
+# S3 Ui Bucket, Cloudfront
+#######################
+  CallbackCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          ForwardedValues:
+            QueryString: true
+          TargetOriginId: webpage
+          ViewerProtocolPolicy: redirect-to-https
+        CacheBehaviors:
+          - AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            Compress: false
+            ForwardedValues:
+              Headers:
+                - Accept
+                - Referer
+                - Authorization
+                - Content-Type
+              QueryString: true
+            PathPattern: "/secure/*"
+            TargetOriginId: apiSecure
+            ViewerProtocolPolicy: https-only
+            DefaultTTL: 0
+            MaxTTL: 0
+            MinTTL: 0
+          - AllowedMethods:
+              - GET
+              - HEAD
+            ForwardedValues:
+              QueryString: true
+            Compress: false
+            PathPattern: "/public/*"
+            TargetOriginId: apiPublic
+            ViewerProtocolPolicy: https-only
+            DefaultTTL: 0
+            MaxTTL: 0
+            MinTTL: 0
+        DefaultRootObject: index.html
+        Enabled: true
+        Origins:
+          - DomainName:
+              Fn::Join:
+                - ""
+                - - Ref: CallbackWebUIBucketName
+                  - ".s3."
+                  - Ref: AWS::Region
+                  - ".amazonaws.com"
+            Id: webpage
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${CfOriginAccessIdentity}'
+          - DomainName: !Sub "${secureApi}.execute-api.${AWS::Region}.amazonaws.com"
+            Id: apiSecure
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only 
+          - DomainName: !Sub "${publicApi}.execute-api.${AWS::Region}.amazonaws.com"
+            Id: apiPublic
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only 
+        PriceClass: PriceClass_100
+  CfOriginAccessIdentity:
+    Metadata:
+      Comment: 'Access S3 bucket content only through CloudFront'
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: 'Access S3 bucket content only through CloudFront'
+    Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
+  CallbackWebUIBucketName:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-callback-ui"
+      AccessControl: 'Private'
+      BucketEncryption: 
+        ServerSideEncryptionConfiguration: 
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  WebUIBucketPolicy:
+    Properties:
+      Bucket: !Ref CallbackWebUIBucketName
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 's3:GetObject'
+            Effect: 'Allow'
+            Principal:
+              CanonicalUser: !GetAtt CfOriginAccessIdentity.S3CanonicalUserId
+            Resource:
+              - !Sub 'arn:aws:s3:::${CallbackWebUIBucketName}/*'
+    Type: 'AWS::S3::BucketPolicy'
+
+#######################
+# Cognito
+#######################
+  CognitoUserPool:
+    Type: 'AWS::Cognito::UserPool'
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-Pool'
+      AutoVerifiedAttributes:
+        - email
+  CognitoUserPoolClient:
+    Type: 'AWS::Cognito::UserPoolClient'
+    Properties:
+      ClientName: !Sub '${AWS::StackName}-Client'
+      GenerateSecret: false
+      UserPoolId: !Ref CognitoUserPool
+      ExplicitAuthFlows: 
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+#######################
+# Cognito Setup
+#######################
+  CognitoLambdaIamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      RoleName : !Sub '${AWS::StackName}-CognitoRole'
+      Path: /
+      Policies:
+        - PolicyName: cognito
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cognito-idp:AdminCreateUser'
+                  - 'cognito-idp:AdminSetUserPassword'
+                Resource: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPool}'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  CognitoLambdaSourceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-CognitoFunction'
+      Role: !GetAtt CognitoLambdaIamRole.Arn
+      CodeUri: 
+        Bucket: !Ref SolutionSourceBucket
+        Key: index.zip
+      Handler: cognitoCreateAdmin.handler
+      Description: Stack Creation - Cognito Setup
+  CognitoLambdaTrigger:
+    Type: 'Custom::CognitoLambdaTrigger'
+    Properties:
+      ServiceToken: !GetAtt CognitoLambdaSourceFunction.Arn
+      RequestToken: ${ClientRequestToken}
+      Region: !Sub '${AWS::Region}'
+      UserPool: !Ref CognitoUserPool          
+      email: !Ref AdminUserEmail          
+
+#######################
+# OUTPUT
+#######################
+Outputs:
+  CallbackEventLogTable:
+    Value: !GetAtt CallbackEventLogTable.Arn
+  S3BucketUi:
+    Value: !GetAtt CallbackWebUIBucketName.Arn
+  Cloudfront:
+    Value: !GetAtt CallbackWebUIBucketName.Arn
