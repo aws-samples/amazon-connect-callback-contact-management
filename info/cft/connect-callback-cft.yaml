@@ -428,4 +428,5 @@ Outputs:
   S3BucketUi:
     Value: !GetAtt CallbackWebUIBucketName.Arn
   Cloudfront:
-    Value: !GetAtt CallbackWebUIBucketName.Arn
+    Description: CloudFront distribution
+    Value: !Join ["", ["https://", !GetAtt CallbackCloudFront.DomainName]]
