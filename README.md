@@ -45,11 +45,13 @@ In the above architecture, Amazon Connects fires contact lifecycle events for ca
 
 8. Upload the forntend code (step 2) in the UI S3 bucket (step 7) 
 
-9. Download the contact flows from here (./info/contactflow/)
+9. Under the CFT output tab, copy the CloudFront URL and invoke the WebApp. Login with the temporary credentials you received in the email.
+
+10. Download the contact flows from here (./info/contactflow/)
     1. First, under the customer queue flow, import the "Sample interruptible queue flow with callback-2" and publish
     2. Second, under the flow, import "test_callback_contact_flow", then upda the "Set customer queue flow" with the flow imported in Stp 9.1 and then publish
 
-10. Associate a phone number to the flow imported in step 9.2
+11. Associate a phone number to the flow imported in step 9.2
 
 ## Validate and testing
 1.  Navigate to CloudFront service and use the domain name to browse the Web App
