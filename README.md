@@ -21,18 +21,18 @@ In the above architecture, Amazon Connects fires contact lifecycle events for ca
 
 ## Walkthrough
 
-1.	Download the backend source code (from /backend) in your local.
+1.	Download the backend source code [here](/backend) in your local.
     1. Run npm install
     2. zip the content 
     3. Name the ziped file index.zip
 
-2.  Download the frontend code (./frontend).
+2.  Download the frontend code [here](/frontend)
 
 3.	Create a S3 solution bucket in your AWS account.
 
 4.	Place the Zip files downloaded in step 1.3 in the S3 bucket created in step 3
 
-5.	Run the CFT located (./info/cft/connect-callback-cft.yaml).
+5.	Run the CFT located [here](/info/cft/connect-callback-cft.yaml)
 
 6.	Following parameters needed for the CFT:
     1.	InstanceArn: Copy the Amazon Connect instance ARN
@@ -47,7 +47,7 @@ In the above architecture, Amazon Connects fires contact lifecycle events for ca
 
 9. Under the CFT output tab, copy the CloudFront URL and invoke the WebApp. Login with the temporary credentials you received in the email.
 
-10. Download the contact flows from here (./info/contactflow/)
+10. Download the contact flows from [here](/info/contactflow/)
     1. First, under the customer queue flow, import the "Sample interruptible queue flow with callback-2" and publish
     2. Second, under the flow, import "test_callback_contact_flow", then upda the "Set customer queue flow" with the flow imported in Stp 9.1 and then publish
 
